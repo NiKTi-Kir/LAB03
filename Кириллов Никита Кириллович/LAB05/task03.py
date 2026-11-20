@@ -1,62 +1,112 @@
 #!/usr/bin/env python3
+
 import argparse
-import sys
 
-"""
-Утилита для обработки списка строк.
-
-Поддерживает фильтрацию уникальных строк, фильтрацию по минимальной длине,
-сортировку (по возрастанию/убыванию/без сортировки) и подсчёт количества
-строк после применения всех фильтров.
-"""
+SORT_CHOICES = ("asc", "desc", "none")
 
 
-parser = argparse.ArgumentParser(description="Обработчик строк")
-parser.add_argument("strings", nargs="+", help="Одна или несколько строк")
-parser.add_argument("-c", "--count", action="store_true",
-                    help="Вывести только количество строк после фильтров")
-parser.add_argument("-u", "--unique", action="store_true",
-                    help="Оставить только уникальные строки")
-parser.add_argument("-m", "--min-length", type=int, default=None,
-                    help="Минимальная длина строки")
-parser.add_argument("--sort", choices=["asc", "desc", "none"],
-                    default="none", help="Порядок сортировки")
+def deduplicate(data):
+    """
+    Удаляет дубликаты, сохраняя исходный порядок.
 
-args = parser.parse_args()
+    Args:
+        data (list[str]): Исходный список строк.
 
-
-if not args.strings:
-    print("Ошибка: не передано ни одной строки", file=sys.stderr)
-    sys.exit(1)
-
-data = list(args.strings)
-
-
-if args.unique:
+    Returns:
+        list[str]: Список без повторов.
+    """
     seen = set()
-    unique = []
+    result = []
     for s in data:
         if s not in seen:
             seen.add(s)
-            unique.append(s)
-    data = unique
+            result.append(s)
+    return result
 
-if args.min_length is not None:
-    data = [s for s in data if len(s) >= args.min_length]
 
-if args.sort == "asc":
-    data.sort()
-elif args.sort == "desc":
-    data.sort(reverse=True)
+def filter_by_length(data, min_length):
+    """
+    Оставляет строки длиной не меньше min_length.
 
-if args.count:
-    print(len(data))
-else:
-    for s in data:
-        print(s)
+    Args:
+        data (list[str]): Исходный список.
+        min_length (int | None): Минимальная длина или None (без фильтра).
+
+    Returns:
+        list[str]: Отфильтрованный список.
+    """
+    if min_length is None:
+        return data
+    return [s for s in data if len(s) >= min_length]
+
+
+def apply_sort(data, order):
+    """
+    Сортирует список согласно выбранному порядку.
+
+    Args:
+        data (list[str]): Список строк.
+        order (str): Одно из SORT_CHOICES.
+
+    Returns:
+        list[str]: Отсортированный список (или тот же при order == "none").
+    """
+    if order == "asc":
+        return sorted(data)
+    if order == "desc":
+        return sorted(data, reverse=True)
+    return data
+
+
+def build_parser():
+    """Создаёт парсер аргументов командной строки."""
+    parser = argparse.ArgumentParser(description="Обработчик строк")
+    parser.add_argument("strings", nargs="+", help="Одна или несколько строк")
+    parser.add_argument(
+        "-c", "--count", action="store_true",
+        help="Вывести только количество строк после фильтров",
+    )
+    parser.add_argument(
+        "-u", "--unique", action="store_true",
+        help="Оставить только уникальные строки",
+    )
+    parser.add_argument(
+        "-m", "--min-length", type=int, default=None,
+        help="Минимальная длина строки",
+    )
+    parser.add_argument(
+        "--sort", choices=SORT_CHOICES, default="none",
+        help="Порядок сортировки",
+    )
+    return parser
+
+
+def process(strings, unique, min_length, order):
+    """
+    Применяет все фильтры и сортировку последовательно.
+
+    Args:
+        strings (list[str]): Исходные строки.
+        unique (bool): Удалять ли дубликаты.
+        min_length (int | None): Минимальная длина.
+        order (str): Порядок сортировки.
+
+    Returns:
+        list[str]: Обработанный список.
+    """
+    data = list(strings)
+    if unique:
+        data = deduplicate(data)
+    data = filter_by_length(data, min_length)
+    return apply_sort(data, order)
+
 
 if __name__ == "__main__":
-    print("Примеры запуска:")
-    print("  python task3.py apple banana apple cherry -u")
-    print("  python task3.py a bb ccc dddd -m 3 --sort desc")
-    print("  python task3.py a b c -c")
+    args = build_parser().parse_args()
+    data = process(args.strings, args.unique, args.min_length, args.sort)
+    if args.count:
+        print(len(data))
+    else:
+        for s in data:
+            print(s)
+          
