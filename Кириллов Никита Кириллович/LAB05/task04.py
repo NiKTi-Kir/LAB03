@@ -1,70 +1,116 @@
 #!/usr/bin/env python3
+
 import argparse
-import os
-import sys
+from pathlib import Path
+
+EXIT_INPUT_NOT_FOUND = 1
+EXIT_OUTPUT_EXISTS = 2
+REPLACE_SEPARATOR = "="
+
 
 def parse_replace(value):
     """
+    Разбирает строку вида OLD=NEW в кортеж (old, new).
+
     Args:
-        value (str): Строка вида "OLD=NEW". Символ '=' может встречаться
-            в NEW — используется только первое вхождение.
+        value (str): Строка с разделителем REPLACE_SEPARATOR.
 
     Returns:
-        tuple[str, str]: Кортеж (old, new), где old — заменяемая подстрока,
-            new — строка-замена.
-    """
+        tuple[str, str]: (old, new). Разделитель ищется только в первом вхождении.
 
-    if "=" not in value:
+    Raises:
+        argparse.ArgumentTypeError: Если разделитель отсутствует.
+    """
+    if REPLACE_SEPARATOR not in value:
         raise argparse.ArgumentTypeError(
-            f"Ожидается формат OLD=NEW, получено: '{value}'"
+            f"Ожидается формат OLD{REPLACE_SEPARATOR}NEW, получено: '{value}'"
         )
-    old, new = value.split("=", 1)
+    old, new = value.split(REPLACE_SEPARATOR, 1)
     return old, new
 
 
-parser = argparse.ArgumentParser(description="Копирование файла с заменами")
-parser.add_argument("--input", required=True, help="Путь к входному файлу")
-parser.add_argument("--output", required=True, help="Путь к выходному файлу")
-parser.add_argument("--replace", type=parse_replace, action="append",
-                    default=[], help="Замена OLD=NEW (можно указывать несколько раз)")
-parser.add_argument("--append-footer", default=None,
-                    help="Строка, добавляемая в конец выходного файла")
-parser.add_argument("--overwrite", action="store_true",
-                    help="Разрешить перезапись существующего выходного файла")
+def build_parser():
+    """Создаёт парсер аргументов командной строки."""
+    parser = argparse.ArgumentParser(description="Копирование файла с заменами")
+    parser.add_argument("--input", required=True, help="Путь к входному файлу")
+    parser.add_argument("--output", required=True, help="Путь к выходному файлу")
+    parser.add_argument(
+        "--replace", type=parse_replace, action="append", default=[],
+        help="Замена OLD=NEW (можно указывать несколько раз)",
+    )
+    parser.add_argument(
+        "--append-footer", default=None,
+        help="Строка, добавляемая в конец выходного файла",
+    )
+    parser.add_argument(
+        "--overwrite", action="store_true",
+        help="Разрешить перезапись существующего выходного файла",
+    )
+    return parser
 
-args = parser.parse_args()
 
-if not os.path.isfile(args.input):
-    print(f"Ошибка: входной файл '{args.input}' не найден", file=sys.stderr)
-    sys.exit(1)
+def apply_replacements(content, replacements):
+    """
+    Применяет последовательность замен и считает общее число вхождений.
 
-if os.path.exists(args.output) and not args.overwrite:
-    print(f"Ошибка: выходной файл '{args.output}' уже существует. "
-          f"Используйте --overwrite для перезаписи.", file=sys.stderr)
-    sys.exit(1)
+    Args:
+        content (str): Исходный текст.
+        replacements (list[tuple[str, str]]): Пары (old, new).
 
-with open(args.input, "r", encoding="utf-8") as f:
-    content = f.read()
-
-total_replacements = 0
-for old, new in args.replace:
-    if old:
-        count = content.count(old)
+    Returns:
+        tuple[str, int]: Изменённый текст и суммарное число замен.
+    """
+    total = 0
+    for old, new in replacements:
+        if not old:
+            continue
+        total += content.count(old)
         content = content.replace(old, new)
-        total_replacements += count
+    return content, total
 
-if args.append_footer is not None:
+
+def add_footer(content, footer):
+    """
+    Добавляет футер в конец текста, гарантируя перевод строки перед ним.
+
+    Args:
+        content (str): Исходный текст.
+        footer (str | None): Строка футера или None.
+
+    Returns:
+        str: Текст с футером (или без изменений при footer is None).
+    """
+    if footer is None:
+        return content
     if content and not content.endswith("\n"):
         content += "\n"
-    content += args.append_footer + "\n"
+    return content + footer + "\n"
 
-with open(args.output, "w", encoding="utf-8") as f:
-    f.write(content)
-
-print(f"Выполнено замен: {total_replacements}")
 
 if __name__ == "__main__":
-    print("Примеры запуска:")
-    print("  python task4.py --input in.txt --output out.txt --replace foo=bar")
-    print("  python task4.py --input in.txt --output out.txt --append-footer '---'")
-    print("  python task4.py --input in.txt --output out.txt --overwrite")
+    args = build_parser().parse_args()
+    input_path = Path(args.input)
+    output_path = Path(args.output)
+
+    if not input_path.is_file():
+        print(f"Ошибка: входной файл '{args.input}' не найден")
+        exit(EXIT_INPUT_NOT_FOUND)
+
+    if output_path.exists() and not args.overwrite:
+        print(
+            f"Ошибка: выходной файл '{args.output}' уже существует. "
+            f"Используйте --overwrite для перезаписи."
+        )
+        exit(EXIT_OUTPUT_EXISTS)
+
+    with open(input_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    content, total = apply_replacements(content, args.replace)
+    content = add_footer(content, args.append_footer)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    print(f"Выполнено замен: {total}")
+    
