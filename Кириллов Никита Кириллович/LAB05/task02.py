@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 import argparse
-import sys
+
+DEFAULT_PRECISION = 2
+EXIT_DIVISION_BY_ZERO = 1
+OPERATIONS = ("add", "sub", "mul", "div")
+
 
 def compute(x, y, op, precision):
+    """
+    Выполняет арифметическую операцию и округляет результат.
 
-    """Выполняет арифметическую операцию над двумя числами.
     Args:
-        x (float): Первое число-операнд.
-        y (float): Второе число-операнд.
-        op (str или None): Название операции. Допустимые значения:
-            'add' — сложение, 'sub' — вычитание,
-            'mul' — умножение, 'div' — деление.
-            Если None, операция не выполняется.
-        precision (int): Количество знаков после запятой в результате.
+        x (float): Первый операнд.
+        y (float): Второй операнд.
+        op (str | None): Одна из OPERATIONS или None.
+        precision (int): Количество знаков после запятой.
 
     Returns:
-        float или None: Результат операции, округлённый до указанной точности.
-            Возвращает None, если op равен None.
-    """
+        float | None: Результат или None, если op is None.
 
+    Raises:
+        SystemExit: При делении на ноль.
+    """
     if op is None:
         return None
     if op == "add":
@@ -27,45 +30,68 @@ def compute(x, y, op, precision):
         res = x - y
     elif op == "mul":
         res = x * y
-    elif op == "div":
+    else:  # op == "div"
         if y == 0:
-            print("Ошибка: деление на ноль", file=sys.stderr)
-            sys.exit(1)
+            print("Ошибка: деление на ноль")
+            exit(EXIT_DIVISION_BY_ZERO)
         res = x / y
-    else:
-        res = 0
     return round(res, precision)
 
 
-# === Главный код ===
-parser = argparse.ArgumentParser(description="Калькулятор с историей")
-parser.add_argument("x", type=float, help="Первое число")
-parser.add_argument("y", type=float, help="Второе число")
-parser.add_argument("operation", nargs="?",
-                    choices=["add", "sub", "mul", "div"], default=None,
-                    help="Операция (по умолчанию — просто вывод чисел)")
-parser.add_argument("-p", "--precision", type=int, default=2,
-                    help="Точность (знаков после запятой)")
-parser.add_argument("-n", "--name", default=None,
-                    help="Имя файла для сохранения результата")
+def build_parser():
+    """Создаёт парсер аргументов командной строки."""
+    parser = argparse.ArgumentParser(description="Калькулятор с историей")
+    parser.add_argument("x", type=float, help="Первое число")
+    parser.add_argument("y", type=float, help="Второе число")
+    parser.add_argument(
+        "operation", nargs="?", choices=OPERATIONS, default=None,
+        help="Операция (по умолчанию — просто вывод чисел)",
+    )
+    parser.add_argument(
+        "-p", "--precision", type=int, default=DEFAULT_PRECISION,
+        help=f"Точность (знаков после запятой), по умолчанию {DEFAULT_PRECISION}",
+    )
+    parser.add_argument(
+        "-n", "--name", default=None,
+        help="Имя файла для сохранения результата",
+    )
+    return parser
 
-args = parser.parse_args()
 
-if args.operation is None:
-    line = f"{args.x} {args.y}"
-else:
-    result = compute(args.x, args.y, args.operation, args.precision)
-    line = f"{args.x} {args.operation} {args.y} = {result}"
+def format_line(x, y, op, precision):
+    """
+    Формирует строку результата для вывода и сохранения.
 
-print(line)
+    Args:
+        x (float): Первый операнд.
+        y (float): Второй операнд.
+        op (str | None): Операция или None.
+        precision (int): Точность округления.
 
-if args.name is not None:
+    Returns:
+        str: Строка вида "x op y = result" или "x y".
+    """
+    if op is None:
+        return f"{x} {y}"
+    result = compute(x, y, op, precision)
+    return f"{x} {op} {y} = {result}"
 
-    with open(args.name, "a", encoding="utf-8") as f:
+
+def save_line(path, line):
+    """Дописывает строку в файл.
+
+    Args:
+        path (str): Путь к файлу.
+        line (str): Строка для записи.
+    """
+    with open(path, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
+
 if __name__ == "__main__":
-    print("Примеры запуска:")
-    print("  python task2.py 3 4")
-    print("  python task2.py 10 3 add -p 4 -n log.txt")
-    print("  python task2.py 5 0 div   # -> ошибка деления на ноль")
+    args = build_parser().parse_args()
+    line = format_line(args.x, args.y, args.operation, args.precision)
+    print(line)
+    if args.name is not None:
+        save_line(args.name, line)
+        
